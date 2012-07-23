@@ -13,6 +13,7 @@ ConnectionManager::ConnectionManager(QObject *parent) :
 
     pairTimer = new QTimer(this);
     pairTimer->setSingleShot(true);
+    pairTimer->setInterval(PAIR_TIMEOUT);
     connect(pairTimer, SIGNAL(timeout()), this, SLOT(pairingTimedOut()));
 
     //Seed random
@@ -66,9 +67,27 @@ QString ConnectionManager::generatePairCode(int len)
     return code;
 }
 
+void ConnectionManager::allowDeviceToPair(network_id_ptr id, bool allowed)
+{
+    if(id != pairingInfo.device || pairTimer->isActive())
+        return;
+    if (allowed)
+    {
+        //Do nothing. Handler has already done a GeneratePairCode()
+        //Waiting on PAIR_CODE_RESPONSE now
+        pairTimer->start();
+    }
+    else
+    {
+        commConnection->send(pairingInfo.ip, pairingInfo.port, PAIR_CODE_CANCEL);
+        stopPairing();
+    }
+}
+
 void ConnectionManager::addFoundDevice(network_id_ptr id, QHostAddress ip)
 {
-
+    foundDevices.push_back(id);
+    emit deviceFound(id);
 }
 
 void ConnectionManager::addPairedDevice(network_id_ptr id, QHostAddress ip)
@@ -78,12 +97,24 @@ void ConnectionManager::addPairedDevice(network_id_ptr id, QHostAddress ip)
 
 void ConnectionManager::updatePairedDeviceIp(network_id_ptr id, QHostAddress ip)
 {
-    pairedDevices[id] = ip;
+    //Move old ip's disalloweds to new ip
+    QHostAddress oldIp = pairedDevices[id];
+
+    if(oldIp != ip)
+    {
+        pairedDevices[id] = ip;
+#ifdef ALLOW_DISABLING_PLUGINS_FOR_SPECIFIC_DEVICES
+        disallowedHandlers[ip] = disallowedHandlers[oldIp];
+        disallowedHandlers.remove(oldIp);
+#endif
+        emit deviceIpChanged(id, ip);
+    }
 }
 
 void ConnectionManager::removedPairedDevice(network_id_ptr id)
 {
     pairedDevices.remove(id);
+    emit deviceRemoved(id);
 }
 
 void ConnectionManager::discoveryMessageReceived(PacketReceivedData packet)
@@ -120,18 +151,19 @@ void ConnectionManager::commMessageReceived(PacketReceivedData packet)
             //Requesting device not paired yet
             commConnection->send(ip, port, OK_TO_PAIR);
             startPairing(ip, port, mac);
-            //OnPairRequest(e.Ip, mac);
         }
     }
     else if (isMessage(PAIR_CODE_RESPONSE, data) && pairingInfo.isPairing)
     {
+        //Stop other devices trying to send us the pair code or empty pair codes
+        if(pairingInfo.device != mac || pairingInfo.code.size() <= 0)
+            return;
+
         //Sending pair code to us
         //var sentCode = new byte[pairCode.Length];
         //Array.Copy(e.Bytes, PAIR_CODE_RESPONSE.Length, sentCode, 0, pairCode.Length);
-        QByteArray PAIR_CODE_RESPONSEx;
-
-        int startIdx = PAIR_CODE_RESPONSEx.length();
-        bool sentCodeCorrect = false;
+        int startIdx = MESSAGE_SIZE;
+        bool sentCodeCorrect = true;
         for(int i = startIdx, j = 0;
             i < data.length() && j < pairingInfo.code.length();
             i++, j++)
@@ -149,18 +181,18 @@ void ConnectionManager::commMessageReceived(PacketReceivedData packet)
         {
             addPairedDevice(mac, ip);
             commConnection->send(ip, port, AUTHORISED);
-            //OnDevicePaired(e.Ip, hardwareId, true);
+            emit devicePaired(mac, ip, true);
         }
         else
         {
             commConnection->send(ip, port, INCORRECT_PAIR_CODE);
-            //OnDevicePaired(e.Ip, hardwareId, false);
+            emit devicePaired(mac, ip, false);
         }
     }
     else if (isMessage(PAIR_CODE_CANCEL, data) && pairingInfo.isPairing)
     {
         stopPairing();
-        //OnPairCanceled();
+        emit pairCanceled();
     }
     else if (isMessage(ARE_WE_PAIRED, data) && !pairingInfo.isPairing)
     {
@@ -188,15 +220,37 @@ void ConnectionManager::commMessageReceived(PacketReceivedData packet)
 void ConnectionManager::dataMessageReceived(PacketReceivedData packet)
 {
     QByteArray data = packet.getBytes();
+    QHostAddress ip = packet.getAddress();
+
+    //Check if allowed hardware
+    if (!pairedDevices.containsValue(ip))
+    {
+        emit unauthorisedDevice(pairedDevices[ip], ip);
+        return;
+    }
+
+    for(uint i = 0; i < packetHandlers.size(); i++)
+    {
+#ifdef ALLOW_DISABLING_PLUGINS_FOR_SPECIFIC_DEVICES
+        if(disallowedHandlers.contains(ip)
+           && !disallowedHandlers[ip].contains(packetHandlers[i]->id()))
+            continue;
+#endif
+
+        if (packetHandlers[i]->handle(data))
+            break;
+    }
 }
 
-void ConnectionManager::startPairing(QHostAddress ip, int port, network_id_ptr hardwareId)
+void ConnectionManager::startPairing(QHostAddress ip, int port, network_id_ptr mac)
 {
     pairingInfo.isPairing = true;
     pairingInfo.ip = ip;
     pairingInfo.port = port;
     //Increases ref count
-    pairingInfo.device = hardwareId;
+    pairingInfo.device = mac;
+    QString pairCode = generatePairCode(6);
+    emit deviceWantsToPair(mac, ip);
 }
 
 void ConnectionManager::stopPairing()
@@ -210,7 +264,9 @@ void ConnectionManager::stopPairing()
 
 void ConnectionManager::pairingTimedOut()
 {
-
+    commConnection->send(pairingInfo.ip, pairingInfo.port, PAIR_CODE_CANCEL);
+    stopPairing();
+    emit pairTimedOut();
 }
 
 bool ConnectionManager::isMessage(const char msg[], QByteArray bytes)

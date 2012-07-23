@@ -69,7 +69,7 @@ public:
         int ret = SendARP(destIp, 0, &macAddr, &physAddrLen);
         qDebug() << ret << endl;
 
-        for (int i = 0; i < physAddrLen; i++) {
+        for (ULONG i = 0; i < physAddrLen; i++) {
             bytes.append(*((char*)&macAddr + i));
         }
 

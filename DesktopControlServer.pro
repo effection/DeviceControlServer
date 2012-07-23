@@ -20,9 +20,10 @@ HEADERS  += mainwindow.h \
     udpconnection.h \
     connectionmanager.h \
     packetreceiveddata.h \
-    MacAddress.h \
     networkid.h \
-    bihash.h
+    bihash.h \
+    macaddress.h \
+    ipackethandler.h
 
 FORMS    += mainwindow.ui
 

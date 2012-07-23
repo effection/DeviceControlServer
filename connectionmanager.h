@@ -4,15 +4,20 @@
 #include <QObject>
 #include <QTimer>
 #include <QList>
+#include <QUuid>
 #include <memory>
-#include "udpconnection.h"
-#include "packetreceiveddata.h"
-#include "MacAddress.h"
 #include "bihash.h"
+#include "packetreceiveddata.h"
+#include "udpconnection.h"
+#include "macaddress.h"
+#include "ipackethandler.h"
+
+//#define ALLOW_DISABLING_PLUGINS_FOR_SPECIFIC_DEVICES
 
 using namespace std::tr1;
 
 typedef shared_ptr<NetworkId> network_id_ptr;
+typedef shared_ptr<IPacketHandler> packet_handler_ptr;
 
 typedef struct _PairingInfo
 {
@@ -59,7 +64,32 @@ public:
       */
     QString generatePairCode(int len);
 
+    /**
+      * Allows the requesting device to pair.
+      */
+    void allowDeviceToPair(network_id_ptr id, bool yesno);
+
+    /**
+      * Remove paired device from list.
+      */
+    void removedPairedDevice(network_id_ptr id);
+
+    /**
+      * Add a handler for specific packets (first come first serve basis).
+      */
+    void addPacketHandler(packet_handler_ptr handler);
+
 signals:
+
+    void deviceWantsToPair(network_id_ptr id, QHostAddress ip);
+    void devicePaired(network_id_ptr id, QHostAddress ip, bool successful);
+    void pairCanceled();
+    void pairTimedOut();
+    void unauthorisedDevice(network_id_ptr id, QHostAddress ip);
+
+    void deviceFound(network_id_ptr id);
+    void deviceIpChanged(network_id_ptr id, QHostAddress newIp);
+    void deviceRemoved(network_id_ptr id);
     
 public slots:
 
@@ -74,12 +104,29 @@ private:
       */
     void stopPairing();
 
+    /**
+      * Store information about found device on network.
+      */
     void addFoundDevice(network_id_ptr id, QHostAddress ip);
-    void addPairedDevice(network_id_ptr id, QHostAddress ip);
-    void updatePairedDeviceIp(network_id_ptr id, QHostAddress ip);
-    void removedPairedDevice(network_id_ptr id);
 
+    /**
+      * Store information about a paired device.
+      */
+    void addPairedDevice(network_id_ptr id, QHostAddress ip);
+
+    /**
+      * Update paired device's associated MAC address.
+      */
+    void updatePairedDeviceIp(network_id_ptr id, QHostAddress ip);
+
+    /**
+      * Helper to determine packet type.
+      */
     static bool isMessage(const char msg[], QByteArray bytes);
+
+    /**
+      * Helper to generate random integer.
+      */
     static int randInt(int low, int high);
 
 private slots:
@@ -95,12 +142,18 @@ private:
     UdpConnection *dataConnection;
 
     QTimer *pairTimer;
-
     network_id_ptr myMacAddress;
 
-    BiHash<network_id_ptr, QHostAddress> pairedDevices;
+    std::vector<packet_handler_ptr> packetHandlers;
+#ifdef ALLOW_DISABLING_PLUGINS_FOR_SPECIFIC_DEVICES
+    QHash<QHostAddress, QList<QUuid> > disallowedHandlers;
+#endif
 
+    std::vector<network_id_ptr> foundDevices;
+    BiHash<network_id_ptr, QHostAddress> pairedDevices;
     PairingInfo pairingInfo;
+
+    static const int PAIR_TIMEOUT = 30 * 1000;
 
     static const QHostAddress DISCOVERY_ADDR;
     static const qint16 DISCOVERY_PORT = 11300;
@@ -111,22 +164,24 @@ private:
 
     //Message sequences
     //TO DEVICE
-            static const char IS_ANYONE_THERE[];//{ 0xF0, 0xFF, 0x00 };
-            static const char ALREADY_PAIRED[];//{ 0xF0, 0xFF, 0x01 };
-            static const char NOT_PAIRED[];//{ 0xF0, 0xFF, 0x02 };
-            static const char AUTHORISED[];//{ 0xF0, 0xFF, 0x03 };
-            static const char INCORRECT_PAIR_CODE[];//{ 0xF0, 0xFF, 0x04 };
-            //private static readonly byte[] PAIR_CODE_CANCEL =           { 'i' };//{ 0xF0, 0xFF, 0x08 };
-            static const char ARE_YOU_A_SERVER_RESPONSE[];
-            static const char OK_TO_PAIR[];
+    static const int MESSAGE_SIZE = 1;
+    static const QByteArray IS_ANYONE_THERE_B[];
+    static const char IS_ANYONE_THERE[];//{ 0xF0, 0xFF, 0x00 };
+    static const char ALREADY_PAIRED[];//{ 0xF0, 0xFF, 0x01 };
+    static const char NOT_PAIRED[];//{ 0xF0, 0xFF, 0x02 };
+    static const char AUTHORISED[];//{ 0xF0, 0xFF, 0x03 };
+    static const char INCORRECT_PAIR_CODE[];//{ 0xF0, 0xFF, 0x04 };
+    //private static readonly byte[] PAIR_CODE_CANCEL =           { 'i' };//{ 0xF0, 0xFF, 0x08 };
+    static const char ARE_YOU_A_SERVER_RESPONSE[];
+    static const char OK_TO_PAIR[];
 
-            //FROM DEVICE
-            static const char IS_ANYONE_THERE_RESPONSE[];//{ 0xF0, 0xFF, 0x05 };
-            static const char ASK_TO_PAIR[];//{ 0xF0, 0xFF, 0x06 };
-            static const char PAIR_CODE_RESPONSE[];//{ 0xF0, 0xFF, 0x07 };
-            static const char PAIR_CODE_CANCEL[];//{ 0xF0, 0xFF, 0x08 };
-            static const char ARE_YOU_A_SERVER[];
-            static const char ARE_WE_PAIRED[];
+    //FROM DEVICE
+    static const char IS_ANYONE_THERE_RESPONSE[];//{ 0xF0, 0xFF, 0x05 };
+    static const char ASK_TO_PAIR[];//{ 0xF0, 0xFF, 0x06 };
+    static const char PAIR_CODE_RESPONSE[];//{ 0xF0, 0xFF, 0x07 };
+    static const char PAIR_CODE_CANCEL[];//{ 0xF0, 0xFF, 0x08 };
+    static const char ARE_YOU_A_SERVER[];
+    static const char ARE_WE_PAIRED[];
     
 };
 
