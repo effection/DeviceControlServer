@@ -32,9 +32,10 @@ ConnectionManager::ConnectionManager(QObject *parent) :
 
 void ConnectionManager::start()
 {
-    discoveryConnection->startListening(DISCOVERY_ADDR, DISCOVERY_PORT);
     commConnection->startListening(COMM_ADDR, COMM_PORT);
     dataConnection->startListening(DATA_ADDR, DATA_PORT);
+    discoveryConnection->joinMulticastGroup(DISCOVERY_ADDR, DISCOVERY_PORT);
+
 }
 
 void ConnectionManager::stop()
@@ -46,6 +47,12 @@ void ConnectionManager::stop()
 
 void ConnectionManager::reportDevicesOnNetwork()
 {
+    //Clear list and ask devices to report in since they are triggered to respond
+    //to ARE_YOU_A_SERVER_RESPONSE with ARE_WE_PAIRED
+
+    foundDevices.clear();
+    emit foundDevicesCleared();
+
     QByteArray mac = myMacAddress->getBytes();
     QByteArray bytes;
     bytes.append(ARE_YOU_A_SERVER_RESPONSE);
@@ -62,17 +69,23 @@ QString ConnectionManager::generatePairCode(int len)
     {
         int r = randInt(0,9);
         pairingInfo.code.append(r);
-        code.append(r);
+        code.append(QString("%1").arg(r));
     }
     return code;
 }
 
-void ConnectionManager::allowDeviceToPair(network_id_ptr id, bool allowed)
+void ConnectionManager::allowDeviceToPair(bool allowed)
 {
-    if(id != pairingInfo.device || pairTimer->isActive())
+    //Check pairing info has been stored
+    if(!pairingInfo.isPairing)
         return;
-    if (allowed)
+
+    if(allowed)
     {
+        //don't allow trying to pair again.
+        if(pairTimer->isActive())
+            return;
+
         //Do nothing. Handler has already done a GeneratePairCode()
         //Waiting on PAIR_CODE_RESPONSE now
         pairTimer->start();
@@ -87,7 +100,7 @@ void ConnectionManager::allowDeviceToPair(network_id_ptr id, bool allowed)
 void ConnectionManager::addFoundDevice(network_id_ptr id, QHostAddress ip)
 {
     foundDevices.push_back(id);
-    emit deviceFound(id);
+    emit deviceFound(id, ip);
 }
 
 void ConnectionManager::addPairedDevice(network_id_ptr id, QHostAddress ip)
@@ -125,7 +138,7 @@ void ConnectionManager::discoveryMessageReceived(PacketReceivedData packet)
         //Send our mac address back
         QByteArray mac = myMacAddress->getBytes();
         QByteArray bytes;
-        bytes.append(ARE_YOU_A_SERVER_RESPONSE);
+        bytes.append(ARE_YOU_A_SERVER_RESPONSE, MESSAGE_SIZE);
         bytes.append(mac);
         discoveryConnection->send(DISCOVERY_ADDR, DISCOVERY_PORT, bytes);
     }
@@ -156,7 +169,7 @@ void ConnectionManager::commMessageReceived(PacketReceivedData packet)
     else if (isMessage(PAIR_CODE_RESPONSE, data) && pairingInfo.isPairing)
     {
         //Stop other devices trying to send us the pair code or empty pair codes
-        if(pairingInfo.device != mac || pairingInfo.code.size() <= 0)
+        if(/*pairingInfo.device != mac || */pairingInfo.code.size() <= 0)
             return;
 
         //Sending pair code to us
@@ -259,7 +272,7 @@ void ConnectionManager::stopPairing()
     pairingInfo.code.clear();
     pairingInfo.ip.clear();
     pairingInfo.port = 0;
-    pairingInfo.device.reset();
+    //pairingInfo.device = NULL;
 }
 
 void ConnectionManager::pairingTimedOut()

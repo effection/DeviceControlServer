@@ -14,7 +14,12 @@ SOURCES += main.cpp\
         mainwindow.cpp \
     udpconnection.cpp \
     connectionmanager.cpp \
-    packetreceiveddata.cpp
+    packetreceiveddata.cpp \
+    paireddevicesmodel.cpp \
+    founddevicesmodel.cpp \
+    asktopairdialog.cpp \
+    paircodedialog.cpp \
+    macaddress.cpp
 
 HEADERS  += mainwindow.h \
     udpconnection.h \
@@ -23,9 +28,15 @@ HEADERS  += mainwindow.h \
     networkid.h \
     bihash.h \
     macaddress.h \
-    ipackethandler.h
+    ipackethandler.h \
+    paireddevicesmodel.h \
+    founddevicesmodel.h \
+    asktopairdialog.h \
+    paircodedialog.h
 
-FORMS    += mainwindow.ui
+FORMS    += mainwindow.ui \
+    asktopairdialog.ui \
+    paircodedialog.ui
 
 LIBS += -lws2_32
 win32:LIBS += C:\QtSDK\mingw\lib\libiphlpapi.a

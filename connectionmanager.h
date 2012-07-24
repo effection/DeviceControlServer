@@ -16,7 +16,6 @@
 
 using namespace std::tr1;
 
-typedef shared_ptr<NetworkId> network_id_ptr;
 typedef shared_ptr<IPacketHandler> packet_handler_ptr;
 
 typedef struct _PairingInfo
@@ -26,16 +25,18 @@ typedef struct _PairingInfo
     int port;
     network_id_ptr device;
     QByteArray code;
+
+public:
+    _PairingInfo() :
+        isPairing(false), port(0)
+    {
+    }
+
 } PairingInfo;
 
 inline uint qHash(const QHostAddress &addr)
 {
     return qHash(addr.toString());
-}
-
-inline uint qHash(const network_id_ptr &idPtr)
-{
-    return qHash(idPtr.get());
 }
 
 class ConnectionManager : public QObject
@@ -67,7 +68,7 @@ public:
     /**
       * Allows the requesting device to pair.
       */
-    void allowDeviceToPair(network_id_ptr id, bool yesno);
+    void allowDeviceToPair(bool yes);
 
     /**
       * Remove paired device from list.
@@ -87,7 +88,8 @@ signals:
     void pairTimedOut();
     void unauthorisedDevice(network_id_ptr id, QHostAddress ip);
 
-    void deviceFound(network_id_ptr id);
+    void foundDevicesCleared();
+    void deviceFound(network_id_ptr id, QHostAddress ip);
     void deviceIpChanged(network_id_ptr id, QHostAddress newIp);
     void deviceRemoved(network_id_ptr id);
     

@@ -18,7 +18,7 @@
     <item row="1" column="0">
      <layout class="QVBoxLayout" name="verticalLayout">
       <item>
-       <widget class="QListView" name="listView"/>
+       <widget class="QListView" name="lst_PairedDevices"/>
       </item>
      </layout>
     </item>
@@ -37,7 +37,7 @@
      </widget>
     </item>
     <item row="3" column="0">
-     <widget class="QListView" name="listView_2"/>
+     <widget class="QListView" name="lst_FoundDevices"/>
     </item>
     <item row="4" column="0">
      <widget class="QLabel" name="label_3">

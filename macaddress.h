@@ -19,10 +19,42 @@ class MacAddress : public NetworkId
 public:
     MacAddress(QByteArray bytes) { this->bytes = bytes; }
 
-    QString getString() const
+    virtual QString toString() const
     {
-        return QString();
+        if(bytes.size() == 0)
+            return QString();
 
+        QString string;
+
+        for (int i = 0; i < bytes.size(); i++)
+        {
+            if (i > 0)
+                string.append("-");
+
+            QString str= QString::number(bytes.data()[i], 16).toUpper();
+            str = str.rightJustified(2,'0');
+            string.append(str);
+        }
+        return string;
+    }
+
+    virtual QString toString()
+    {
+        if(bytes.size() == 0)
+            return QString();
+
+        QString string;
+
+        for (int i = 0; i < bytes.size(); i++)
+        {
+            if (i > 0)
+                string.append("-");
+
+            QString str= QString::number(bytes.data()[i], 16).toUpper();
+            str = str.rightJustified(2,'0');
+            string.append(str);
+        }
+        return string;
     }
 
     static QHostAddress myIpv4Address()
@@ -51,7 +83,7 @@ public:
         {
             return getMacAddress(myIp);
         }
-        return shared_ptr<MacAddress>(new MacAddress(bytes));
+        return create(bytes);
     }
 
     static shared_ptr<MacAddress> getMacAddress(QHostAddress ip)
@@ -74,8 +106,23 @@ public:
         }
 
 #endif
-        return shared_ptr<MacAddress>(new MacAddress(bytes));
+        return create(bytes);
     }
+
+    static shared_ptr<MacAddress> create(QByteArray bytes)
+    {
+        for(int i = 0; i < cached.size(); i++)
+        {
+            if(cached[i]->getBytes() == bytes)
+                return cached[i];
+        }
+        shared_ptr<MacAddress> item = shared_ptr<MacAddress>(new MacAddress(bytes));
+        cached.push_back(item);
+        return item;
+    }
+
+private:
+    static QList<shared_ptr<MacAddress> > cached;
 };
 
 #endif // MACADDRESS_H

@@ -1,7 +1,8 @@
 #include "udpconnection.h"
 
 UdpConnection::UdpConnection(QObject *parent)
-    : QObject(parent)
+    : QObject(parent),
+      isListening(false), _isMulticast(false)
 {
     socket = new QUdpSocket(this);
     connect(socket, SIGNAL(readyRead()), this, SLOT(processPendingDatagrams()));
@@ -13,17 +14,23 @@ UdpConnection::~UdpConnection()
         socket->leaveMulticastGroup(multicastAddress, multicastInterface);
 }
 
-bool UdpConnection::joinMulticastGroup(QHostAddress address, QNetworkInterface interface)
+bool UdpConnection::joinMulticastGroup(QHostAddress address, quint16 port)
 {
     if(_isMulticast)
         return (multicastAddress == address);
 
-    _isMulticast = socket->joinMulticastGroup(address, interface);
+    if(!socket->bind(port, QUdpSocket::ShareAddress))
+    {
+        qDebug() << "Could not bind multicast" << endl;
+        return false;
+    }else
+        isListening = true;
+
+    _isMulticast = socket->joinMulticastGroup(address);
 
     if(_isMulticast)
     {
         multicastAddress = address;
-        multicastInterface = interface;
     }
     return _isMulticast;
 }

@@ -16,7 +16,7 @@ public:
     UdpConnection(QObject *parent = 0);
     ~UdpConnection();
 
-    bool joinMulticastGroup(QHostAddress address, QNetworkInterface interface);
+    bool joinMulticastGroup(QHostAddress address, quint16 port);
 
     bool send(QHostAddress address, qint16 port, QByteArray data);
     bool startListening(QHostAddress address, qint16 port);
